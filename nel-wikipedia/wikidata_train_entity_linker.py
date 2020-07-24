@@ -57,6 +57,8 @@ def main(
             "No output dir specified so no results will be written, are you sure about this ?"
         )
 
+    random.seed(42)
+
     logger.info("Creating Entity Linker with Wikipedia and WikiData")
 
     output_dir = Path(output_dir) if output_dir else dir_kb
@@ -102,7 +104,7 @@ def main(
     )
     if dev_articles:
         random.shuffle(dev_indices)
-        dev_indices = dev_indices[0:dev_articles]
+        dev_indices = set(dev_indices[0:dev_articles])
 
     # STEP 3: create and train an entity linking pipe
     logger.info(
