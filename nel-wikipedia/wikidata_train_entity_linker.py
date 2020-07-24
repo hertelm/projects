@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
     train_articles=("# training articles (default 90% of all)", "option", "t", int),
     dev_articles=("# dev test articles (default 10% of all)", "option", "d", int),
     labels_discard=("NER labels to discard (default None)", "option", "l", str),
+    in_memory=("Keep training data in memory (default False)", "flag", "m"),
 )
 def main(
     dir_kb,
@@ -49,6 +50,7 @@ def main(
     train_articles=None,
     dev_articles=None,
     labels_discard=None,
+    in_memory=False,
 ):
     if not output_dir:
         logger.warning(
@@ -147,8 +149,21 @@ def main(
 
     for itn in range(epochs):
         random.shuffle(train_indices)
+        epoch_train_indices = train_indices[:train_articles] if train_articles else train_indices
         losses = {}
-        batches = minibatch(train_indices, size=compounding(8.0, 128.0, 1.001))
+
+        # read the training data
+        if in_memory:
+            logger.info("Reading training data for epoch {}".format(itn))
+            index_set = set(epoch_train_indices)
+            training_data = {}
+            with tqdm(total=len(epoch_train_indices), leave=False, desc="Reading training data") as pbar:
+                for i, line in enumerate(training_path.open("r", encoding="utf8")):
+                    if i in index_set:
+                        training_data[i] = line
+                        pbar.update(1)
+
+        batches = minibatch(epoch_train_indices, size=compounding(8.0, 128.0, 1.001))
         batchnr = 0
         articles_processed = 0
 
@@ -160,6 +175,8 @@ def main(
         with tqdm(total=bar_total, leave=False, desc="Epoch " + str(itn)) as pbar:
             for batch in batches:
                 if not train_articles or articles_processed < train_articles:
+                    if in_memory:
+                        training_lines = [training_data[i] for i in batch]
                     with nlp.disable_pipes("entity_linker"):
                         train_batch = wikipedia_processor.read_el_docs_golds(
                             nlp=nlp,
@@ -168,6 +185,7 @@ def main(
                             line_ids=batch,
                             kb=kb,
                             labels_discard=labels_discard,
+                            lines=training_lines if in_memory else None
                         )
                         docs, golds = zip(*train_batch)
                     try:

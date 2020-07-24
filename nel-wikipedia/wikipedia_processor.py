@@ -470,36 +470,40 @@ def read_training_indices(entity_file_path):
     return train_indices, dev_indices
 
 
-def read_el_docs_golds(nlp, entity_file_path, dev, line_ids, kb, labels_discard=None):
+def read_el_docs_golds(nlp, entity_file_path, dev, line_ids, kb, labels_discard=None, lines=None):
     """ This method provides training/dev examples that correspond to the entity annotations found by the nlp object.
      For training, it will include both positive and negative examples by using the candidate generator from the kb.
      For testing (kb=None), it will include all positive examples only."""
     if not labels_discard:
         labels_discard = []
 
-    max_index = max(line_ids)
-
-    with entity_file_path.open("r", encoding="utf8") as _file:
-        line = _file.readline()
-        i = 0
-        while line and i < max_index:
-            if i in line_ids:
-                example = json.loads(line)
-                article_id = example["article_id"]
-                clean_text = example["clean_text"]
-                entities = example["entities"]
-
-                if dev != is_dev(article_id) or not is_valid_article(clean_text):
-                    continue
-
-                doc = nlp(clean_text)
-                gold = _get_gold_parse(
-                    doc, entities, dev=dev, kb=kb, labels_discard=labels_discard
-                )
-                if gold and len(gold.links) > 0:
-                    yield doc, gold
-            i += 1
+    if lines is None:
+        max_index = max(line_ids)
+        lines = []
+        with entity_file_path.open("r", encoding="utf8") as _file:
             line = _file.readline()
+            i = 0
+            while line and i < max_index:
+                if i in line_ids:
+                    lines.append(line)
+                i += 1
+                line = _file.readline()
+
+    for i, line in zip(line_ids, lines):
+        example = json.loads(line)
+        article_id = example["article_id"]
+        clean_text = example["clean_text"]
+        entities = example["entities"]
+
+        if dev != is_dev(article_id) or not is_valid_article(clean_text):
+            continue
+
+        doc = nlp(clean_text)
+        gold = _get_gold_parse(
+            doc, entities, dev=dev, kb=kb, labels_discard=labels_discard
+        )
+        if gold and len(gold.links) > 0:
+            yield doc, gold
 
 
 def _get_gold_parse(doc, entities, dev, kb, labels_discard):
